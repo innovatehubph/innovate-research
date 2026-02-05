@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Plan {
+  FREE
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+enum ResearchStatus {
+  PENDING
+  SEARCHING
+  CRAWLING
+  ANALYZING
+  GENERATING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  password     String
+  name         String
+  plan         Plan          @default(FREE)
+  credits      Int           @default(10)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  
+  apiKeys      ApiKey[]
+  researches   Research[]
+  webhooks     Webhook[]
+  transactions Transaction[]
+}
+
+model ApiKey {
+  id        String    @id @default(uuid())
+  key       String    @unique
+  name      String
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  lastUsed  DateTime?
+}
+
+model Research {
+  id          String         @id @default(uuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  query       String
+  template    String         @default("general")
+  status      ResearchStatus @default(PENDING)
+  progress    Int            @default(0)
+  sources     Json?
+  analysis    Json?
+  report      Json?
+  error       String?
+  createdAt   DateTime       @default(now())
+  completedAt DateTime?
+  
+  exports     Export[]
+}
+
+model Export {
+  id         String   @id @default(uuid())
+  researchId String
+  research   Research @relation(fields: [researchId], references: [id], onDelete: Cascade)
+  format     String
+  fileUrl    String
+  createdAt  DateTime @default(now())
+}
+
+model Webhook {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  url       String
+  events    String[]
+  secret    String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model Transaction {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount       Decimal  @db.Decimal(10, 2)
+  plan         Plan?
+  directpayRef String?
+  status       String   @default("pending")
+  createdAt    DateTime @default(now())
+}

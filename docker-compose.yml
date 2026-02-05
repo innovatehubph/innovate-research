@@ -1,0 +1,127 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: innovate-research-db
+    environment:
+      POSTGRES_USER: innovate
+      POSTGRES_PASSWORD: innovate_research_2026
+      POSTGRES_DB: innovate_research
+    volumes:
+      - innovate-research-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U innovate -d innovate_research"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - innovate-research-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: innovate-research-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - innovate-research-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - innovate-research-network
+
+  minio:
+    image: minio/minio:latest
+    container_name: innovate-research-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: innovate
+      MINIO_ROOT_PASSWORD: innovate_minio_2026
+    volumes:
+      - innovate-research-minio:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - innovate-research-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: innovate-research-backend
+    ports:
+      - "5013:5013"
+    environment:
+      NODE_ENV: production
+      PORT: 5013
+      DATABASE_URL: postgresql://innovate:innovate_research_2026@db:5432/innovate_research
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: innovate
+      MINIO_SECRET_KEY: innovate_minio_2026
+      JWT_SECRET: innovate_research_jwt_secret_2026_super_secure
+      BRAVE_API_KEY: ${BRAVE_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      DIRECTPAY_MERCHANT_ID: ${DIRECTPAY_MERCHANT_ID}
+      DIRECTPAY_MERCHANT_KEY: ${DIRECTPAY_MERCHANT_KEY}
+      DIRECTPAY_ENV: ${DIRECTPAY_ENV:-SANDBOX}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - innovate-research-network
+
+  # Worker disabled for initial deploy - will enable after core services work
+  # worker:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile.worker
+  #   container_name: innovate-research-worker
+  #   environment:
+  #     NODE_ENV: production
+  #     DATABASE_URL: postgresql://innovate:innovate_research_2026@db:5432/innovate_research
+  #     REDIS_URL: redis://redis:6379
+  #     MINIO_ENDPOINT: minio
+  #     MINIO_PORT: 9000
+  #     MINIO_ACCESS_KEY: innovate
+  #     MINIO_SECRET_KEY: innovate_minio_2026
+  #     BRAVE_API_KEY: ${BRAVE_API_KEY}
+  #     OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   networks:
+  #     - innovate-research-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: innovate-research-frontend
+    ports:
+      - "3103:80"
+    depends_on:
+      - backend
+    networks:
+      - innovate-research-network
+
+volumes:
+  innovate-research-db:
+  innovate-research-redis:
+  innovate-research-minio:
+
+networks:
+  innovate-research-network:
+    driver: bridge
